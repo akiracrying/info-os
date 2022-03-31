@@ -1,27 +1,27 @@
 
-__asm("jmp kmain"); // Эта инструкция обязательно должна быть первой, т.к. этот код компилируется в бинарный,
-                    // и загрузчик передает управление по адресу первой инструкции бинарногообраза ядра ОС.
+__asm("jmp kmain"); // Р­С‚Р° РёРЅСЃС‚СЂСѓРєС†РёСЏ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РїРµСЂРІРѕР№, С‚.Рє. СЌС‚РѕС‚ РєРѕРґ РєРѕРјРїРёР»РёСЂСѓРµС‚СЃСЏ РІ Р±РёРЅР°СЂРЅС‹Р№,
+                    // Рё Р·Р°РіСЂСѓР·С‡РёРє РїРµСЂРµРґР°РµС‚ СѓРїСЂР°РІР»РµРЅРёРµ РїРѕ Р°РґСЂРµСЃСѓ РїРµСЂРІРѕР№ РёРЅСЃС‚СЂСѓРєС†РёРё Р±РёРЅР°СЂРЅРѕРіРѕРѕР±СЂР°Р·Р° СЏРґСЂР° РћРЎ.
 
-#define VIDEO_BUF_PTR (0xb8000) // Видеобуфер
-#define IDT_TYPE_INTR (0x0E) // Константы
-#define IDT_TYPE_TRAP (0x0F) // прерываний
+#define VIDEO_BUF_PTR (0xb8000) // Р’РёРґРµРѕР±СѓС„РµСЂ
+#define IDT_TYPE_INTR (0x0E) // РљРѕРЅСЃС‚Р°РЅС‚С‹
+#define IDT_TYPE_TRAP (0x0F) // РїСЂРµСЂС‹РІР°РЅРёР№
 #define GDT_CS (0x8)
 #define PIC1_PORT (0x20)
 #define CURSOR_PORT (0x3D4)
-#define VIDEO_WIDTH (80) // Ширина 
-#define WHITE (0x07) // Код белого цвета
+#define VIDEO_WIDTH (80) // РЁРёСЂРёРЅР° 
+#define WHITE (0x07) // РљРѕРґ Р±РµР»РѕРіРѕ С†РІРµС‚Р°
 
 #define BACKSPACE 14
-#define SPACE 32     // Коды спецклавиш
+#define SPACE 32     // РљРѕРґС‹ СЃРїРµС†РєР»Р°РІРёС€
 #define ENTER 28
 
-unsigned char LINE = 0, COLUMN = 0; // Линия и колонка в которую сейчас поместится символ
+unsigned char LINE = 0, COLUMN = 0; // Р›РёРЅРёСЏ Рё РєРѕР»РѕРЅРєР° РІ РєРѕС‚РѕСЂСѓСЋ СЃРµР№С‡Р°СЃ РїРѕРјРµСЃС‚РёС‚СЃСЏ СЃРёРјРІРѕР»
 unsigned char is_shift = 0x00;
-char console_buf[100]; // Буфер символов, считываемы с клавиатуры
-int len = 0; // Длина буфера символов
-int ticks = 0; // Тики
+char console_buf[100]; // Р‘СѓС„РµСЂ СЃРёРјРІРѕР»РѕРІ, СЃС‡РёС‚С‹РІР°РµРјС‹ СЃ РєР»Р°РІРёР°С‚СѓСЂС‹
+int len = 0; // Р”Р»РёРЅР° Р±СѓС„РµСЂР° СЃРёРјРІРѕР»РѕРІ
+int ticks = 0; // РўРёРєРё
 
-// Различные переменные времени:
+// Р Р°Р·Р»РёС‡РЅС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ РІСЂРµРјРµРЅРё:
 char hours;
 char mins;      // loadtime
 char secs;
@@ -34,38 +34,38 @@ int up_hours;
 int up_mins;        // uptime
 int up_secs;
 
-short ISUP = 0;   // Вспомогательные переменные для вывода незначащего нуля
+short ISUP = 0;   // Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ РґР»СЏ РІС‹РІРѕРґР° РЅРµР·РЅР°С‡Р°С‰РµРіРѕ РЅСѓР»СЏ
 short ISTIME = 0;
 
 enum iterrup_stats{
-    KEYBOARD = 0xFF ^ 0x02,   // Коды прерываний таймера и клавитуры
+    KEYBOARD = 0xFF ^ 0x02,   // РљРѕРґС‹ РїСЂРµСЂС‹РІР°РЅРёР№ С‚Р°Р№РјРµСЂР° Рё РєР»Р°РІРёС‚СѓСЂС‹
     TICK_TIMER = 0xFF ^ 0x01 
 };
 int cur_stat;                 
 
-// Структура описывает данные об обработчике прерывания
+// РЎС‚СЂСѓРєС‚СѓСЂР° РѕРїРёСЃС‹РІР°РµС‚ РґР°РЅРЅС‹Рµ РѕР± РѕР±СЂР°Р±РѕС‚С‡РёРєРµ РїСЂРµСЂС‹РІР°РЅРёСЏ
 struct idt_entry{
-    unsigned short base_lo;// Младшие биты адреса обработчика
-    unsigned short segm_sel;// Селектор сегмента кода
-    unsigned char always0;// Этот байт всегда 0
-    unsigned char flags;// Флаги тип. Флаги: P, DPL, Типы - это константы - IDT_TYPE
-    unsigned short base_hi; // Старшие биты адреса обработчика
-} __attribute__((packed)); // Выравнивание запрещено
+    unsigned short base_lo;// РњР»Р°РґС€РёРµ Р±РёС‚С‹ Р°РґСЂРµСЃР° РѕР±СЂР°Р±РѕС‚С‡РёРєР°
+    unsigned short segm_sel;// РЎРµР»РµРєС‚РѕСЂ СЃРµРіРјРµРЅС‚Р° РєРѕРґР°
+    unsigned char always0;// Р­С‚РѕС‚ Р±Р°Р№С‚ РІСЃРµРіРґР° 0
+    unsigned char flags;// Р¤Р»Р°РіРё С‚РёРї. Р¤Р»Р°РіРё: P, DPL, РўРёРїС‹ - СЌС‚Рѕ РєРѕРЅСЃС‚Р°РЅС‚С‹ - IDT_TYPE
+    unsigned short base_hi; // РЎС‚Р°СЂС€РёРµ Р±РёС‚С‹ Р°РґСЂРµСЃР° РѕР±СЂР°Р±РѕС‚С‡РёРєР°
+} __attribute__((packed)); // Р’С‹СЂР°РІРЅРёРІР°РЅРёРµ Р·Р°РїСЂРµС‰РµРЅРѕ
 
 struct idt_ptr{
     unsigned short limit;
     unsigned int base;
 } __attribute__((packed));
 
-struct idt_entry g_idt[256];// Реальная таблица IDT
-struct idt_ptr g_idtp;// Описатель таблицы для команды lidt
-// Пустой обработчик прерываний. Другие обработчики могут быть реализованы по этому шаблону
+struct idt_entry g_idt[256];// Р РµР°Р»СЊРЅР°СЏ С‚Р°Р±Р»РёС†Р° IDT
+struct idt_ptr g_idtp;// РћРїРёСЃР°С‚РµР»СЊ С‚Р°Р±Р»РёС†С‹ РґР»СЏ РєРѕРјР°РЅРґС‹ lidt
+// РџСѓСЃС‚РѕР№ РѕР±СЂР°Р±РѕС‚С‡РёРє РїСЂРµСЂС‹РІР°РЅРёР№. Р”СЂСѓРіРёРµ РѕР±СЂР°Р±РѕС‚С‡РёРєРё РјРѕРіСѓС‚ Р±С‹С‚СЊ СЂРµР°Р»РёР·РѕРІР°РЅС‹ РїРѕ СЌС‚РѕРјСѓ С€Р°Р±Р»РѕРЅСѓ
 
-const unsigned char SYMBOLS[] = "**1234567890-=-\0qwertyuiop[]\0\0asdfghjkl;'\0\0\0zxcvbnm,./\0\0\0";// PS2 таблица
+const unsigned char SYMBOLS[] = "**1234567890-=-\0qwertyuiop[]\0\0asdfghjkl;'\0\0\0zxcvbnm,./\0\0\0";// PS2 С‚Р°Р±Р»РёС†Р°
 
 typedef void (*intr_handler)();
 
-// Прототипы реализованных функций
+// РџСЂРѕС‚РѕС‚РёРїС‹ СЂРµР°Р»РёР·РѕРІР°РЅРЅС‹С… С„СѓРЅРєС†РёР№
 void line_func();
 void enter_pressed();
 void backspace_pressed();
@@ -101,11 +101,11 @@ unsigned char line_inc(){
     LINE++;
     return LINE;
 }
-// Функция перевода из двоичнодесятичной в десятичную
+// Р¤СѓРЅРєС†РёСЏ РїРµСЂРµРІРѕРґР° РёР· РґРІРѕРёС‡РЅРѕРґРµСЃСЏС‚РёС‡РЅРѕР№ РІ РґРµСЃСЏС‚РёС‡РЅСѓСЋ
 static int bcd_decimal(char bcd){
     return bcd - 6 * (bcd >> 4);
 }       
-// Преобразлвание int в char
+// РџСЂРµРѕР±СЂР°Р·Р»РІР°РЅРёРµ int РІ char
 char int_to_char(long n) {
 	char res;
 	if (n < 10) {
@@ -116,7 +116,7 @@ char int_to_char(long n) {
 	}
 	return res;
 }
-// Сравнение двух массивов char
+// РЎСЂР°РІРЅРµРЅРёРµ РґРІСѓС… РјР°СЃСЃРёРІРѕРІ char
 int cmp(char *first, char *second, int n) {
     int cmp_tmp = 0;
 	for (int i = 0; i < n; i++){
@@ -132,7 +132,7 @@ int cmp(char *first, char *second, int n) {
         return 0;
     }
 }
-// Очистка экрана
+// РћС‡РёСЃС‚РєР° СЌРєСЂР°РЅР°
 void clear(){
     unsigned char* video_buf = (unsigned char*)VIDEO_BUF_PTR;
     for (unsigned short i = 0; i < 48 * VIDEO_WIDTH; i += 2)
@@ -141,7 +141,7 @@ void clear(){
     COLUMN = 2;                                         
     cursor_moveto();
 }
-// Консольные команды
+// РљРѕРЅСЃРѕР»СЊРЅС‹Рµ РєРѕРјР°РЅРґС‹
 short funtions(){
 
     if(cmp(console_buf, "info", 4)){
@@ -234,7 +234,7 @@ short funtions(){
         curtime_func();
         int up_time_cur = (int)cur_hours*60*60 + (int)cur_mins*60 + (int)cur_secs;
         int up_time_load = (int)hours*60*60 + (int)mins*60 + (int)secs;
-        int alltime = up_time_cur - up_time_load; // Время между текущим и загрузки
+        int alltime = up_time_cur - up_time_load; // Р’СЂРµРјСЏ РјРµР¶РґСѓ С‚РµРєСѓС‰РёРј Рё Р·Р°РіСЂСѓР·РєРё
         up_hours = alltime / 3600;alltime = alltime%3600;
         up_mins = alltime/60; alltime = alltime%60;
         up_secs = alltime;
@@ -298,7 +298,7 @@ short funtions(){
 
     cursor_moveto();
 }
-// Вывод числа в консоль
+// Р’С‹РІРѕРґ С‡РёСЃР»Р° РІ РєРѕРЅСЃРѕР»СЊ
 void out_num(int value, int col, int ln){
     int i_arr[100];
     char c_arr[100];
@@ -328,7 +328,7 @@ void out_num(int value, int col, int ln){
     //COLUMN = 2;
     out_str(WHITE, c_arr, ln, col);
 }
-// Регистрация нажатия клавиши ENTER
+// Р РµРіРёСЃС‚СЂР°С†РёСЏ РЅР°Р¶Р°С‚РёСЏ РєР»Р°РІРёС€Рё ENTER
 void enter_pressed(){
     if(console_buf[0] == '\0'){
         return;
@@ -341,7 +341,7 @@ void enter_pressed(){
     cursor_moveto();
     funtions();
 }
-// Регистрация нажатия клавиши BACKSPACE
+// Р РµРіРёСЃС‚СЂР°С†РёСЏ РЅР°Р¶Р°С‚РёСЏ РєР»Р°РІРёС€Рё BACKSPACE
 void backspace_pressed(){
     if (COLUMN <= 2)
         return;
@@ -354,7 +354,7 @@ void backspace_pressed(){
         cursor_moveto();
     }
 }
-// Изменение положения кратеки
+// РР·РјРµРЅРµРЅРёРµ РїРѕР»РѕР¶РµРЅРёСЏ РєСЂР°С‚РµРєРё
 void cursor_moveto(){
     unsigned char* video_buf = (unsigned char*)VIDEO_BUF_PTR + 2 * (VIDEO_WIDTH * LINE + COLUMN);
     video_buf[0] = ' ';
@@ -365,7 +365,7 @@ void cursor_moveto(){
     outb(CURSOR_PORT, 0x0E);
     outb(CURSOR_PORT + 1, (unsigned char)( (new_pos >> 8) & 0xFF));
 }
-// Вывод одного символа после нажантия клавиши
+// Р’С‹РІРѕРґ РѕРґРЅРѕРіРѕ СЃРёРјРІРѕР»Р° РїРѕСЃР»Рµ РЅР°Р¶Р°РЅС‚РёСЏ РєР»Р°РІРёС€Рё
 void write_sym(const unsigned char outwrite_sym){
     if (outwrite_sym == '\0')
         return;
@@ -376,9 +376,9 @@ void write_sym(const unsigned char outwrite_sym){
     video_buf[1] = WHITE; 
     video_buf[3] = WHITE; 
     COLUMN++;
-    cursor_moveto(); // Пермещение каретки
+    cursor_moveto(); // РџРµСЂРјРµС‰РµРЅРёРµ РєР°СЂРµС‚РєРё
 }
-// Регистрация нажати
+// Р РµРіРёСЃС‚СЂР°С†РёСЏ РЅР°Р¶Р°С‚Рё
 void on_key(unsigned char key){
     switch (key){
     case BACKSPACE:
@@ -392,7 +392,7 @@ void on_key(unsigned char key){
         break;
     }
 }
-// Функции работы с прерываниями
+// Р¤СѓРЅРєС†РёРё СЂР°Р±РѕС‚С‹ СЃ РїСЂРµСЂС‹РІР°РЅРёСЏРјРё
 void intr_init(){
     int i;
     int idt_count = sizeof(g_idt) / sizeof(g_idt[0]);
@@ -411,13 +411,13 @@ void intr_enable(){
 void intr_disable(){
     asm("cli");
 }
-// ЗАпись в порт
+// Р—РђРїРёСЃСЊ РІ РїРѕСЂС‚
 static inline unsigned char inb (unsigned short port){
     unsigned char data;
     asm volatile ("inb %w1, %b0" : "=a" (data) : "Nd" (port));
     return data;
 }
-// Чтение из порта
+// Р§С‚РµРЅРёРµ РёР· РїРѕСЂС‚Р°
 static inline void outb (unsigned short port, unsigned char data){
     asm volatile ("outb %b0, %w1" : : "a" (data), "Nd" (port));
     cur_stat = data;
@@ -509,13 +509,13 @@ void keyb_init(){
     intr_reg_handler(0x09, GDT_CS, 0x80 | IDT_TYPE_INTR, keyb_handler);
     outb(PIC1_PORT + 1, KEYBOARD);
 }
-// Включение прерываний тиков и выключение клавиатуры
+// Р’РєР»СЋС‡РµРЅРёРµ РїСЂРµСЂС‹РІР°РЅРёР№ С‚РёРєРѕРІ Рё РІС‹РєР»СЋС‡РµРЅРёРµ РєР»Р°РІРёР°С‚СѓСЂС‹
 void turn_on_ticks() {
 	intr_disable();
 	outb(PIC1_PORT + 1, TICK_TIMER); 
 	intr_enable();
 }
-// Вылючение прерываний тиков и включение клавиатуры
+// Р’С‹Р»СЋС‡РµРЅРёРµ РїСЂРµСЂС‹РІР°РЅРёР№ С‚РёРєРѕРІ Рё РІРєР»СЋС‡РµРЅРёРµ РєР»Р°РІРёР°С‚СѓСЂС‹
 void turn_off_ticks() {
 	intr_disable();
 	outb(PIC1_PORT + 1, KEYBOARD);
